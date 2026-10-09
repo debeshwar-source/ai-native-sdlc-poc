@@ -1,0 +1,680 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg:#fff; --text:#122023; --card:#F3F8F7; --primary:#0F766E; --border:#d5e3e0; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Inter, system-ui, sans-serif; color:var(--text); background:transparent; font-size:14px; }
+  /* 5% catalog rail | 90% workspace | the remaining 5% is the gutters */
+  .wrap { display:grid; grid-template-columns: 5% 90%; justify-content:space-between; position:relative; }
+  h4 { margin:0 0 8px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; opacity:.65; }
+  .tabs { display:flex; flex-direction:column; gap:2px; margin-bottom:8px; }
+  .tab { padding:5px 2px; cursor:pointer; border:0; background:transparent; color:inherit; font:inherit; font-size:11px; opacity:.6; border-left:2px solid transparent; text-align:left; }
+  .tab.on { opacity:1; border-left-color:var(--primary); font-weight:600; }
+  .palette { display:flex; flex-direction:column; gap:6px; }
+  .chip, .node { border:1px solid var(--border); background:var(--card); border-radius:10px; }
+  .chip { padding:5px 4px; font-size:11px; gap:2px; cursor:grab; display:flex; align-items:center; gap:8px; border-left:4px solid var(--accent); user-select:none; }
+  .chip.used { opacity:.35; cursor:not-allowed; }
+  .chip button.x { display:none; font-size:12px; padding:0; }
+  .chip:hover button.x { display:block; }
+  .chip span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #add-pane .close { position:absolute; top:6px; right:8px; font-size:20px; line-height:1; }
+  .hint { opacity:.55; font-size:11px; padding:6px 2px; }
+  /* the add-agent form is a floating panel over the workspace, so the rail stays 5% wide */
+  #add-pane { position:absolute; left:5%; top:0; width:min(340px, 85%); z-index:5; background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:4px 14px 14px; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+  .lane { min-height:620px; border:2px dashed var(--border); border-radius:12px; }
+  .lane.over { border-color:var(--primary); }
+  .empty { position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); opacity:.55; text-align:center; pointer-events:none; }
+  .node { padding:10px; border-left:4px solid var(--accent); position:relative; max-width:100%; }
+  .grip { position:absolute; right:2px; bottom:2px; width:16px; height:16px; cursor:nwse-resize; opacity:.45; touch-action:none; background:linear-gradient(135deg, transparent 0 50%, currentColor 50% 58%, transparent 58% 72%, currentColor 72% 80%, transparent 80%); }
+  .grip:hover { opacity:1; }
+  .head { display:flex; align-items:center; gap:8px; cursor:grab; user-select:none; }
+  .head .n { background:var(--accent); border-radius:50%; width:12px; height:12px; flex:none; }
+  .head b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  button.x { border:0; background:transparent; cursor:pointer; font-size:16px; color:inherit; opacity:.55; }
+  button.x:hover { opacity:1; }
+  select { width:100%; border:1px solid var(--border); border-radius:8px; padding:8px; font:inherit; background:var(--bg); color:var(--text); }
+  input, textarea { width:100%; border:1px solid var(--border); border-radius:8px; padding:8px; font:inherit; background:var(--bg); color:var(--text); }
+  textarea { margin-top:8px; resize:vertical; min-height:54px; }
+  input:focus, textarea:focus { outline:2px solid var(--primary); border-color:transparent; }
+  label { display:block; font-size:12px; font-weight:600; margin:10px 0 4px; }
+  .form textarea { margin-top:0; }
+  .check { display:flex; gap:8px; align-items:flex-start; font-weight:400; font-size:13px; }
+  .check input { width:auto; margin-top:3px; }
+  .save { margin-top:12px; width:100%; padding:8px; border:0; border-radius:8px; background:var(--primary); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  .save:disabled { opacity:.4; cursor:not-allowed; }
+  /* Each agent is a chat: live steps, replies, and a composer at the bottom. */
+  .node-head-btn { font-size:15px; }
+  .chat { margin-top:8px; max-height:460px; min-height:90px; overflow:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; }
+  .chat .empty-chat { opacity:.5; font-size:13px; margin:auto; text-align:center; }
+  .bubble { align-self:flex-end; max-width:85%; background:var(--primary); color:#fff; border-radius:12px 12px 2px 12px; padding:7px 11px; white-space:pre-wrap; word-break:break-word; }
+  .steps { border-left:3px solid var(--border); padding:0 0 0 10px; font-size:12px; }
+  .steps > summary { cursor:pointer; opacity:.65; padding:2px 0; }
+  .steps .t { margin:5px 0; white-space:pre-wrap; word-break:break-word; }
+  .steps .think { opacity:.65; font-style:italic; }
+  .steps .tool code { background:var(--card); border-radius:4px; padding:1px 4px; }
+  .steps .res { opacity:.7; }
+  .steps .res summary { cursor:pointer; }
+  .steps .res.err { color:#c0392b; opacity:1; }
+  .status { font-size:12px; opacity:.75; padding:2px 0; }
+  .reply { background:var(--bg); border:1px solid var(--border); border-radius:12px 12px 12px 2px; padding:8px 11px; align-self:flex-start; max-width:95%; }
+  .reply.error { border-color:#c0392b; }
+  .reply .sum { font-weight:600; margin-bottom:6px; }
+  .reply pre { white-space:pre-wrap; word-break:break-word; margin:0; font:inherit; }
+  .composer { margin-top:8px; border:1px solid var(--border); border-radius:12px; background:var(--bg); padding:6px 8px; }
+  .composer:focus-within { outline:2px solid var(--primary); border-color:transparent; }
+  .composer textarea { margin:0; border:0; padding:4px; min-height:44px; max-height:160px; resize:none; background:transparent; }
+  .composer textarea:focus { outline:none; }
+  .foot { display:flex; align-items:center; gap:8px; margin-top:4px; }
+  .foot .chipx { font-size:12px; background:var(--card); border-radius:999px; padding:3px 10px; opacity:.85; white-space:nowrap; }
+  .foot .sp { flex:1; }
+  .foot { min-width:0; overflow:hidden; }
+  .foot .chipx { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .foot button.plus { border:0; background:transparent; color:inherit; font-size:18px; cursor:pointer; opacity:.6; padding:0 4px; line-height:1; }
+  .foot button.plus:hover { opacity:1; }
+  .sendbtn { width:32px; height:32px; border:0; border-radius:8px; background:var(--primary); color:#fff; font-size:16px; font-weight:700; cursor:pointer; }
+  .sendbtn:disabled { opacity:.35; cursor:not-allowed; }
+  .sendbtn.stop { background:#c0392b; margin-right:6px; }
+  .wshead { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .wshead h4 { margin:0; }
+  .orchbtn { border:1px solid var(--border); background:var(--card); color:inherit; font:inherit; font-size:11px; border-radius:999px; padding:2px 10px; cursor:pointer; opacity:.8; }
+  .orchbtn:hover, .orchbtn.on { opacity:1; border-color:var(--primary); color:var(--primary); }
+  .memory { border:2px solid var(--border); border-radius:12px; padding:12px 14px; min-height:300px; }
+  .memory h5 { margin:16px 0 6px; font-size:12px; letter-spacing:.05em; text-transform:uppercase; opacity:.65; display:flex; align-items:center; gap:10px; }
+  .mem-head { display:flex; align-items:center; gap:10px; font-size:15px; }
+  .kbrow { font-size:13px; padding:2px 0; word-break:break-all; }
+  .mem-entry { border-left:3px solid var(--primary); background:var(--card); border-radius:8px; padding:8px 12px; margin:8px 0; }
+  .mem-title { display:flex; gap:10px; align-items:baseline; }
+  .mem-label { font-size:11px; font-weight:600; opacity:.6; margin-top:6px; }
+  .mem-entry pre { white-space:pre-wrap; word-break:break-word; margin:2px 0 0; font:inherit; }
+  .mem-entry pre.err { color:#c0392b; }
+  .linkbtn { border:0; background:transparent; color:inherit; font:inherit; font-size:11px; text-decoration:underline; cursor:pointer; opacity:.6; text-transform:none; letter-spacing:0; }
+  .linkbtn:hover { opacity:1; }
+  .qa { align-self:stretch; font-size:12px; border-left:3px solid var(--primary); padding:2px 0 2px 10px; opacity:.85; }
+  .qa .a { opacity:.75; }
+  .qgroup { align-self:stretch; border:1px solid var(--primary); border-radius:12px; background:var(--bg); padding:10px 12px; }
+  .qgroup .qhead { font-size:11px; font-weight:600; color:var(--primary); margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em; }
+  .qgroup .q { margin-bottom:12px; }
+  .qgroup .qtext { font-weight:600; margin-bottom:6px; }
+  .opts { display:flex; flex-wrap:wrap; gap:6px; }
+  .opt { border:1px solid var(--border); background:var(--card); color:inherit; font:inherit; font-size:13px; border-radius:999px; padding:5px 12px; cursor:pointer; text-align:left; }
+  .opt:hover { border-color:var(--primary); }
+  .opt.sel { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .qgroup input.other { margin-top:6px; }
+  .qgroup .go { margin-top:2px; padding:6px 14px; border:0; border-radius:8px; background:var(--primary); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  .qgroup .go:disabled { opacity:.35; cursor:not-allowed; }
+  /* The workspace is a free canvas of nodes joined by wires: drag a node by its header, drag from its
+     right-hand dot to another node to pass this agent's output into that agent's context. */
+  .lane { position:relative; overflow:hidden; }
+  .lane .node { position:absolute; width:480px; }
+  #wires { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+  #wires path.wire { fill:none; stroke:var(--primary); stroke-width:2.5; opacity:.8; }
+  #wires path.wire.temp { stroke-dasharray:6 5; opacity:.9; }
+  .wirex { position:absolute; width:18px; height:18px; margin:-9px 0 0 -9px; border-radius:50%; border:1px solid var(--border); background:var(--bg); color:inherit; font-size:12px; line-height:1; cursor:pointer; opacity:.55; padding:0; z-index:3; }
+  .wirex:hover { opacity:1; border-color:#c0392b; color:#c0392b; }
+  .port { position:absolute; top:17px; width:14px; height:14px; margin-top:-7px; border-radius:50%; background:var(--bg); border:2.5px solid var(--primary); z-index:4; touch-action:none; }
+  .port.out { right:-8px; cursor:crosshair; }
+  .port.in { left:-9px; }
+  .port.out:hover { background:var(--primary); }
+  .node.target { outline:2px dashed var(--primary); outline-offset:3px; }
+  .head { cursor:grab; }
+  .head.moving { cursor:grabbing; }
+  .inputs { font-size:11px; opacity:.75; margin-top:6px; display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+  .inputs span.c { background:var(--bg); border:1px solid var(--border); border-radius:999px; padding:1px 8px; }
+  .disabled { pointer-events:none; opacity:.6; }
+  @media (max-width: 640px) { .wrap { grid-template-columns: 1fr; } .tabs { flex-direction:row; } #add-pane { left:0; } }
+</style>
+</head>
+<body>
+<div class="wrap" id="root">
+  <div>
+    <div class="tabs"><button class="tab" id="tab-catalog" title="Catalog">Catalog</button><button class="tab" id="tab-add" title="Add agent">+ Add</button></div>
+    <div id="catalog-pane"><div class="palette" id="palette"></div></div>
+    <div id="add-pane" class="form" style="display:none">
+      <button class="x close" id="f-close" title="Close" aria-label="Close">&times;</button>
+      <h4 id="f-title" style="margin:10px 0 0">New agent</h4>
+      <div class="status" id="f-hint" style="display:none">Changes apply from this agent's next order. Its conversation is kept.</div>
+      <label for="f-name">Name</label>
+      <input id="f-name" placeholder="e.g. Security Auditor">
+      <label for="f-job">Job description</label>
+      <textarea id="f-job" rows="4" placeholder="What is this agent responsible for?"></textarea>
+      <label for="f-skills">Skills</label>
+      <textarea id="f-skills" rows="3" placeholder="e.g. OWASP Top 10, dependency auditing, threat modelling"></textarea>
+      <label for="f-model">Model</label>
+      <select id="f-model"></select>
+      <label for="f-atl">Jira &amp; Confluence</label>
+      <select id="f-atl"><option value="">Ask me when needed</option><option value="never">Never use Jira / Confluence</option></select>
+      <label class="check"><input type="checkbox" id="f-edit"><span>Can create and edit files in the repository (otherwise read-only)</span></label>
+      <button class="save" id="f-save" disabled>Save to catalog</button>
+    </div>
+  </div>
+  <div><div class="wshead"><h4>Workspace &middot; drag from a node's right dot to another node to pass its output on</h4><button id="orch-btn" class="orchbtn" title="Orchestrator: everything it knows about the task, the knowledge base, and what each agent was given and produced">&#9678; Orchestrator</button></div><div class="lane" id="lane"></div><div class="memory" id="memory" style="display:none"></div></div>
+</div>
+<script>
+  // Minimal Streamlit component protocol (no build step / no npm).
+  const send = (type, data) => window.parent.postMessage({isStreamlitMessage:true, type, ...data}, "*");
+  const PALETTE = ["#1565C0","#AD1457","#2E7D32","#E65100","#6A1B9A","#00838F","#283593","#F9A825","#455A64"];
+  const MIN_W = 150, MIN_CHAT_H = 0;
+  let memory = {knowledge: [], history: []}, memoryOpen = false, qstate = {};
+  let outputs = {}, openSteps = {}, stick = {}, lastCommand = null, lastSig = "", models = [], defaultModel = "", catalog = [], stages = [], disabled = false, resetToken = null, started = false;
+  let edges = [], timer = null, tab = "catalog";
+  const accent = id => { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; };
+  const meta = id => catalog.find(a => a.id === id) || {id, name:id + " (deleted)", job_description:""};
+  const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const $ = id => document.getElementById(id);
+
+  function commit() { send("streamlit:setComponentValue", {value:{catalog, command: lastCommand, edges, stages: stages.map(s => ({id:s.id, orders:s.orders, size:s.size, pos:s.pos}))}, dataType:"json"}); }
+  function commitSoon() { clearTimeout(timer); timer = setTimeout(commit, 700); }
+  // Measure the content itself, never documentElement.scrollHeight: that is
+  // never smaller than the iframe's own height, so reporting it grew the
+  // frame forever. Only report real changes.
+  let lastHeight = 0;
+  function height() {
+    const h = Math.ceil($("root").getBoundingClientRect().height) + 8;
+    if (h === lastHeight) return;
+    lastHeight = h;
+    send("streamlit:setFrameHeight", {height: h});
+  }
+
+  // Default spot for a node with no position yet: a loose two-column grid.
+  const autoPos = i => ({x: 24 + (i % 2) * 520, y: 24 + Math.floor(i / 2) * 400});
+  function add(id, pos) {
+    if (stages.some(s => s.id === id)) return;
+    stages.push({id, orders:"", pos: pos || autoPos(stages.length)});
+    render(); commit();
+  }
+  function removeStage(id) {
+    stages = stages.filter(s => s.id !== id);
+    edges = edges.filter(e => e.from !== id && e.to !== id);
+  }
+  // Would adding from->to make a loop (to already leads back to from)?
+  function reaches(a, b, seen = new Set()) {
+    if (a === b) return true; seen.add(a);
+    return edges.some(e => e.from === a && !seen.has(e.to) && reaches(e.to, b, seen));
+  }
+  function connect(from, to) {
+    if (from === to || edges.some(e => e.from === from && e.to === to) || reaches(to, from)) return false;
+    edges.push({from, to}); render(); commit(); return true;
+  }
+
+  function renderTabs() {
+    $("tab-catalog").classList.toggle("on", tab === "catalog");
+    $("tab-add").classList.toggle("on", tab === "add");
+    $("catalog-pane").style.display = tab === "catalog" ? "" : "none";
+    $("add-pane").style.display = tab === "add" ? "" : "none";
+  }
+
+  function renderPalette() {
+    const p = $("palette"); p.innerHTML = "";
+    if (!catalog.length) p.appendChild(el("div", "hint", "Empty. Use <b>+ Add</b>."));
+    catalog.forEach(a => {
+      const used = stages.some(s => s.id === a.id);
+      const c = el("div", "chip" + (used ? " used" : ""), `<span>${esc(a.name)}</span>`);
+      c.style.setProperty("--accent", accent(a.id)); c.title = a.name;
+      c.draggable = !used && !disabled;
+      c.addEventListener("dragstart", e => { e.dataTransfer.setData("text/plain", "new:" + a.id); e.dataTransfer.effectAllowed = "copy"; });
+      c.addEventListener("dblclick", () => !disabled && add(a.id));
+      const ed = el("button", "x", "&#9998;"); ed.title = "Edit this agent's configuration";
+      ed.addEventListener("click", e => { e.stopPropagation(); openEditor(a.id); });
+      c.appendChild(ed);
+      const rm = el("button", "x", "&times;"); rm.title = "Delete this agent from the catalog";
+      rm.addEventListener("click", () => {
+        catalog = catalog.filter(x => x.id !== a.id); removeStage(a.id);
+        render(); commit();
+      });
+      c.appendChild(rm);
+      p.appendChild(c);
+    });
+  }
+
+  function modelLabel(m) {
+    const x = /claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-|$)/.exec(m || "");
+    return x ? x[1][0].toUpperCase() + x[1].slice(1) + " " + x[2] + (x[3] ? "." + x[3] : "") : (m || "");
+  }
+  function command(type, id, text, extra) {
+    clearTimeout(timer);
+    lastCommand = {type, id, text: text || "", nonce: Date.now(), ...(extra || {})};
+    commit();
+  }
+
+  function stepEls(trace) {
+    const out = [];
+    trace.forEach(ev => {
+      if (ev.type === "thinking") out.push(el("div", "t think", "&#128173; " + esc(ev.text)));
+      else if (ev.type === "text") out.push(el("div", "t", "&#128172; " + esc(ev.text)));
+      else if (ev.type === "tool_use") out.push(el("div", "t tool", `&#128295; <b>${esc(ev.tool)}</b> <code>${esc(ev.input)}</code>`));
+      else if (ev.type === "tool_result") {
+        const d = el("details", "t res" + (ev.error ? " err" : ""));
+        d.innerHTML = `<summary>${ev.error ? "&#8627; error" : "&#8627; result"}</summary>${esc(ev.text || "(empty)")}`;
+        d.addEventListener("toggle", height);
+        out.push(d);
+      }
+    });
+    return out;
+  }
+
+  // The agent has stopped to ask the user something (its ask_user tool) and is waiting.
+  // A form the agent needs filled in (e.g. to connect Jira & Confluence): text and password fields.
+  function renderForm(agentId, waiting) {
+    const box = el("div", "qgroup");
+    box.appendChild(el("div", "qhead", esc(waiting.title || "Waiting for you")));
+    if (waiting.note) box.appendChild(el("div", "status", esc(waiting.note)));
+    if (waiting.error) box.appendChild(el("div", "status", `<b style="color:#c0392b">${esc(waiting.error)}</b>`));
+    const st = qstate[waiting.id] || (qstate[waiting.id] = Object.fromEntries(waiting.fields.map(f => [f.name, f.value || ""])));
+    const go = el("button", "go", "Connect");
+    const ready = () => waiting.fields.every(f => (st[f.name] || "").trim());
+    waiting.fields.forEach(f => {
+      const row = el("div", "q"); row.appendChild(el("div", "qtext", esc(f.label)));
+      const inp = el("input", "other"); inp.type = f.type === "password" ? "password" : "text";
+      inp.placeholder = f.placeholder || ""; inp.value = st[f.name]; inp.autocomplete = "off";
+      inp.dataset.fid = `form:${waiting.id}:${f.name}`;
+      inp.addEventListener("input", () => { st[f.name] = inp.value; go.disabled = !ready(); });
+      inp.addEventListener("keydown", e => { if (e.key === "Enter" && ready()) go.click(); });
+      row.appendChild(inp); box.appendChild(row);
+    });
+    go.disabled = !ready();
+    go.addEventListener("click", () => {
+      go.disabled = true; command("credentials", agentId, "", {qid: waiting.id, values: {...st}});
+      // Don't keep the token around: it must not ride along with later commits.
+      setTimeout(() => { if (lastCommand && lastCommand.values) lastCommand = {...lastCommand, values: null}; delete qstate[waiting.id]; }, 800);
+    });
+    box.appendChild(go);
+    return box;
+  }
+
+  function renderQuestions(agentId, waiting) {
+    if (waiting.kind === "form") return renderForm(agentId, waiting);
+    const box = el("div", "qgroup");
+    box.appendChild(el("div", "qhead", "Waiting for your answer"));
+    const st = qstate[waiting.id] || (qstate[waiting.id] = waiting.questions.map(() => ({choice: null, other: ""})));
+    const answerOf = a => a.choice === "__other__" ? a.other.trim() : (a.choice || "");
+    const anyAnswer = () => st.some(a => answerOf(a));
+    const goBtn = el("button", "go", "Send answers");
+    waiting.questions.forEach((q, qi) => {
+      const qd = el("div", "q", `<div class="qtext">${esc(q.question)}</div>`);
+      const opts = el("div", "opts");
+      q.options.forEach(o => {
+        const b = el("button", "opt" + (st[qi].choice === o ? " sel" : ""), esc(o) + (o === q.recommended_option ? " &#10024;" : ""));
+        b.title = o === q.recommended_option ? "Recommended" : "";
+        b.addEventListener("click", () => { st[qi].choice = st[qi].choice === o ? null : o; render(); });
+        opts.appendChild(b);
+      });
+      const ob = el("button", "opt" + (st[qi].choice === "__other__" ? " sel" : ""), "Other…");
+      ob.addEventListener("click", () => { st[qi].choice = st[qi].choice === "__other__" ? null : "__other__"; render(); });
+      opts.appendChild(ob);
+      qd.appendChild(opts);
+      if (st[qi].choice === "__other__") {
+        const inp = el("input", "other"); inp.placeholder = "Your own answer or alternative…"; inp.value = st[qi].other;
+        inp.dataset.fid = `other:${waiting.id}:${qi}`;
+        inp.addEventListener("input", () => { st[qi].other = inp.value; goBtn.disabled = !anyAnswer(); });
+        inp.addEventListener("keydown", e => { if (e.key === "Enter" && anyAnswer()) goBtn.click(); });
+        qd.appendChild(inp);
+      }
+      box.appendChild(qd);
+    });
+    goBtn.disabled = !anyAnswer();
+    goBtn.title = "Questions you leave unanswered go back as 'no preference'";
+    goBtn.addEventListener("click", () => command("answer", agentId, "", {qid: waiting.id, answers: st.map(answerOf)}));
+    box.appendChild(goBtn);
+    return box;
+  }
+
+  function renderChat(id, turns) {
+    const chat = el("div", "chat");
+    chat.dataset.chat = id;
+    if (!turns.length) chat.appendChild(el("div", "empty-chat", "Give this agent an order below."));
+    turns.forEach((t, ti) => {
+      chat.appendChild(el("div", "bubble", esc(t.orders)));
+      (t.messages || []).forEach(m => chat.appendChild(el("div", "bubble", esc(m.text))));   // sent while it was working
+      const running = t.status === "running";
+      if (t.status === "queued") { chat.appendChild(el("div", "status", "&#8987; Queued &mdash; runs right after the current task")); return; }
+      (t.qa || []).forEach(r => {
+        const qa = el("div", "qa");
+        qa.innerHTML = r.questions.map((q, i) => `<div>&#10067; ${esc(q.question)}</div>` + (r.free_text ? "" : `<div class="a">&#8627; ${esc(r.answers[i] || "no preference")}</div>`)).join("") +
+          (r.free_text ? `<div class="a">&#8627; You replied: ${esc(r.free_text)}</div>` : "");
+        chat.appendChild(qa);
+      });
+      if (t.trace && t.trace.length) {
+        const key = id + ":" + ti;
+        const d = el("details", "steps");
+        d.open = running || !!openSteps[key];
+        d.innerHTML = `<summary>${running ? "Working" : "Worked"}${t.seconds !== undefined ? " for " + t.seconds + "s" : ""} &middot; ${t.trace.length} step${t.trace.length === 1 ? "" : "s"}</summary>`;
+        stepEls(t.trace).forEach(e => d.appendChild(e));
+        d.addEventListener("toggle", () => { if (!running) openSteps[key] = d.open; height(); });
+        chat.appendChild(d);
+      }
+      if (running && t.waiting) {
+        chat.appendChild(renderQuestions(id, t.waiting));
+      } else if (running) {
+        chat.appendChild(el("div", "status running", `<span class="word">${esc(pickWord())}…</span> <span class="elapsed" data-started="${t.started}"></span>`));
+      } else if (t.status === "done") {
+        const r = el("div", "reply");
+        r.innerHTML = `<div class="sum">${esc(t.summary || "")}</div><pre>${esc(t.output || "")}</pre>` +
+          (t.files_changed && t.files_changed.length ? `<div class="status">Files written: ${esc(t.files_changed.join(", "))}</div>` : "");
+        chat.appendChild(r);
+      } else if (t.status === "error") {
+        chat.appendChild(el("div", "reply error", `<div class="sum">Failed</div><pre>${esc(t.error || "")}</pre>`));
+      } else if (t.status === "stopped") {
+        chat.appendChild(el("div", "status", "&#9632; Stopped"));
+      }
+    });
+    chat.addEventListener("scroll", () => { stick[id] = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 40; });
+    return chat;
+  }
+
+  // One agent as a chat box: header, conversation, composer, resize grip.
+  function buildNode(s, m, i) {
+    const turns = (outputs[s.id] && outputs[s.id].turns) || [];
+    const last = turns[turns.length - 1];
+    const busy = turns.some(t => t.status === "running");
+    const waitingNow = turns.some(t => t.status === "running" && t.waiting && t.waiting.kind !== "form");
+    const node = el("div", "node");
+    node.dataset.id = s.id;
+    node.style.setProperty("--accent", accent(s.id));
+    const head = el("div", "head", `<span class="n"></span><b>${esc(m.name)}</b>`);
+    head.title = (m.job_description || "") + "\n(drag to move)";
+    const rm = el("button", "x", "&times;"); rm.title = "Remove from workspace";
+    rm.addEventListener("click", () => { if (busy) command("stop", s.id); removeStage(s.id); render(); commit(); });
+    const cfg = el("button", "x", "&#9881;"); cfg.title = "Edit this agent's configuration";
+    cfg.addEventListener("click", () => openEditor(s.id));
+    head.append(cfg, rm);
+
+    // Move the node by its header.
+    head.addEventListener("pointerdown", e => {
+      if (e.target.closest("button") || disabled) return;
+      e.preventDefault(); head.setPointerCapture(e.pointerId); head.classList.add("moving");
+      const x0 = e.clientX, y0 = e.clientY, p0 = {...s.pos};
+      const move = ev => {
+        s.pos = {x: Math.max(0, Math.round(p0.x + ev.clientX - x0)), y: Math.max(0, Math.round(p0.y + ev.clientY - y0))};
+        node.style.left = s.pos.x + "px"; node.style.top = s.pos.y + "px"; drawWires(); fitLane();
+      };
+      const up = () => { head.classList.remove("moving"); head.removeEventListener("pointermove", move); head.removeEventListener("pointerup", up); commit(); };
+      head.addEventListener("pointermove", move); head.addEventListener("pointerup", up);
+    });
+
+    // Input dot (left) and output dot (right) -- drag from the output to another node.
+    node.appendChild(el("div", "port in")).title = "Input: receives the output of connected agents";
+    const out = el("div", "port out"); out.title = "Output: drag to another agent to pass this agent's output into its context";
+    out.addEventListener("pointerdown", e => {
+      if (disabled) return;
+      e.preventDefault(); e.stopPropagation(); out.setPointerCapture(e.pointerId);
+      const temp = svgEl("path", "wire temp"); $("wires").appendChild(temp);
+      const laneBox = () => $("lane").getBoundingClientRect();
+      const targetAt = ev => { const n = document.elementFromPoint(ev.clientX, ev.clientY); const t = n && n.closest && n.closest(".node"); return t && t.dataset.id !== s.id ? t : null; };
+      const move = ev => {
+        const r = laneBox(), p = portPos(s, "out");
+        temp.setAttribute("d", curve(p.x, p.y, ev.clientX - r.left, ev.clientY - r.top));
+        document.querySelectorAll(".node.target").forEach(n => n.classList.remove("target"));
+        const t = targetAt(ev); if (t) t.classList.add("target");
+      };
+      const up = ev => {
+        out.removeEventListener("pointermove", move); out.removeEventListener("pointerup", up);
+        const t = targetAt(ev); temp.remove();
+        document.querySelectorAll(".node.target").forEach(n => n.classList.remove("target"));
+        if (t) connect(s.id, t.dataset.id);
+      };
+      out.addEventListener("pointermove", move); out.addEventListener("pointerup", up);
+    });
+    node.appendChild(out);
+
+    const sources = edges.filter(e => e.to === s.id).map(e => meta(e.from).name);
+    const inputsRow = sources.length ? el("div", "inputs", "Context from: " + sources.map(n => `<span class="c">${esc(n)}</span>`).join("")) : null;
+
+    const chat = renderChat(s.id, turns);
+
+    const comp = el("div", "composer");
+    const ta = el("textarea"); ta.rows = 2; ta.dataset.fid = "composer:" + s.id;
+    ta.placeholder = waitingNow ? `Reply to ${m.name}'s question in your own words, or pick an option above…  (Enter to send)`
+      : busy ? `Message ${m.name} — it sees this right away…  (Enter to send)`
+      : `Give ${m.name} an order…  (Enter to send, Shift+Enter for a new line)`;
+    ta.value = s.orders; ta.disabled = disabled;
+    const foot = el("div", "foot");
+    const plus = el("button", "plus", "+"); plus.title = "New conversation (clears this chat)";
+    plus.disabled = busy;
+    plus.addEventListener("click", () => command("new", s.id));
+    const chipM = el("span", "chipx", esc(modelLabel(m.model || defaultModel)));
+    chipM.title = "Model: " + (m.model || defaultModel);
+    const btn = el("button", "sendbtn", "&#8593;");
+    btn.title = waitingNow ? "Send as your reply" : busy ? "Send now (the agent sees it right away)" : "Send";
+    const fire = () => {
+      const text = s.orders.trim(); if (!text || disabled) return;
+      command("send", s.id, text); s.orders = ""; ta.value = ""; btn.disabled = true;
+    };
+    btn.disabled = disabled || !s.orders.trim();
+    btn.addEventListener("click", fire);
+    ta.addEventListener("input", () => { s.orders = ta.value; btn.disabled = disabled || !s.orders.trim(); commitSoon(); });
+    ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); fire(); } });
+    ta.addEventListener("blur", () => { clearTimeout(timer); commit(); });
+    foot.append(plus, chipM);
+    if (m.atlassian === "never") {
+      const chipA = el("span", "chipx", "Jira &amp; Confluence · off");
+      chipA.title = "This agent will not use Jira or Confluence";
+      foot.appendChild(chipA);
+    }
+    foot.append(el("span", "sp"));
+    if (busy) {
+      const stopBtn = el("button", "sendbtn stop", "&#9632;"); stopBtn.title = "Stop this agent";
+      stopBtn.addEventListener("click", () => command("stop", s.id));
+      foot.appendChild(stopBtn);
+    }
+    foot.appendChild(btn);
+    comp.append(ta, foot);
+    node.append(head);
+    if (inputsRow) node.appendChild(inputsRow);
+    node.append(chat, comp);
+    node.style.left = s.pos.x + "px"; node.style.top = s.pos.y + "px";
+
+    // Size set by dragging the corner grip (width of the box, height of its chat area).
+    if (s.size && s.size.w) node.style.width = s.size.w + "px";
+    if (s.size && s.size.h) { chat.style.height = s.size.h + "px"; chat.style.maxHeight = "none"; chat.style.minHeight = "0"; }
+    const grip = el("div", "grip"); grip.title = "Drag to resize · double-click to reset";
+    grip.addEventListener("pointerdown", e => {
+      e.preventDefault(); grip.setPointerCapture(e.pointerId);
+      const w0 = node.getBoundingClientRect().width, h0 = chat.getBoundingClientRect().height, x0 = e.clientX, y0 = e.clientY;
+      const maxW = $("lane").clientWidth - 22;
+      const move = ev => {
+        const w = Math.round(Math.min(maxW, Math.max(MIN_W, w0 + ev.clientX - x0)));
+        const h = Math.round(Math.max(MIN_CHAT_H, h0 + ev.clientY - y0));
+        node.style.width = w + "px"; chat.style.height = h + "px"; chat.style.maxHeight = "none"; chat.style.minHeight = "0";
+        s.size = {w, h}; drawWires(); fitLane(); height();
+      };
+      const up = () => { grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up); commit(); };
+      grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", up);
+    });
+    grip.addEventListener("dblclick", () => { s.size = undefined; render(); commit(); });
+    node.appendChild(grip);
+    return {node, chat};
+  }
+
+  const svgEl = (tag, cls) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); if (cls) e.setAttribute("class", cls); return e; };
+  const nodeEl = id => document.querySelector(`.node[data-id="${id}"]`);
+  // Where a node's output (right) / input (left) dot is, in lane coordinates.
+  function portPos(s, which) {
+    const n = nodeEl(s.id), w = n ? n.offsetWidth : (s.size && s.size.w) || 480;
+    return {x: s.pos.x + (which === "out" ? w : 0), y: s.pos.y + 17};
+  }
+  const curve = (x1, y1, x2, y2) => { const d = Math.max(60, Math.abs(x2 - x1) / 2); return `M${x1},${y1} C${x1 + d},${y1} ${x2 - d},${y2} ${x2},${y2}`; };
+
+  function drawWires() {
+    const svg = $("wires"); svg.querySelectorAll("path.wire:not(.temp)").forEach(p => p.remove());
+    document.querySelectorAll(".wirex").forEach(b => b.remove());
+    edges.forEach(e => {
+      const a = stages.find(s => s.id === e.from), b = stages.find(s => s.id === e.to);
+      if (!a || !b) return;
+      const p = portPos(a, "out"), q = portPos(b, "in");
+      const path = svgEl("path", "wire"); path.setAttribute("d", curve(p.x, p.y, q.x, q.y)); path.setAttribute("marker-end", "url(#arrow)");
+      svg.appendChild(path);
+      const x = el("button", "wirex", "&times;"); x.title = `Disconnect ${meta(e.from).name} → ${meta(e.to).name}`;
+      x.style.left = (p.x + q.x) / 2 + "px"; x.style.top = (p.y + q.y) / 2 + "px";
+      x.addEventListener("click", () => { edges = edges.filter(z => z !== e); render(); commit(); });
+      $("lane").appendChild(x);
+    });
+  }
+
+  // The canvas grows to hold its lowest node.
+  function fitLane() {
+    let bottom = 0;
+    document.querySelectorAll(".lane .node").forEach(n => { bottom = Math.max(bottom, n.offsetTop + n.offsetHeight); });
+    $("lane").style.height = Math.max(620, bottom + 60) + "px";
+    height();
+  }
+
+  function renderLane() {
+    // Rebuilding the lane must not cost the user their typing position or scroll.
+    const ae = document.activeElement;
+    const focusId = ae && ae.dataset ? ae.dataset.fid : null;
+    const sel = focusId && ae.selectionStart !== undefined ? [ae.selectionStart, ae.selectionEnd] : null;
+    const lane = $("lane"); lane.innerHTML = "";
+    edges = edges.filter(e => stages.some(s => s.id === e.from) && stages.some(s => s.id === e.to));
+    stages.forEach((s, i) => { if (!s.pos) s.pos = autoPos(i); });
+    const svg = svgEl("svg"); svg.id = "wires";
+    svg.innerHTML = '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--primary)"/></marker></defs>';
+    lane.appendChild(svg);
+    if (!stages.length) lane.appendChild(el("div", "empty", "Drag an agent here from the catalog<br><small>or double-click one in the catalog</small>"));
+    stages.forEach((s, i) => {
+      const {node, chat} = buildNode(s, meta(s.id), i);
+      lane.appendChild(node);
+      if (stick[s.id] !== false) chat.scrollTop = chat.scrollHeight;
+    });
+    drawWires(); fitLane();
+    if (focusId) {
+      const t = lane.querySelector(`[data-fid="${focusId}"]`);
+      if (t) { t.focus(); if (sel) { try { t.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
+    }
+  }
+
+  // ---- The Orchestrator: lives in the background; this is its memory, shown on click ----
+  const fmtTime = ts => ts ? new Date(ts * 1000).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) : "";
+  function renderMemory() {
+    const box = $("memory"); box.innerHTML = "";
+    const kb = memory.knowledge || [], hist = memory.history || [];
+    box.appendChild(el("div", "mem-head",
+      `<b>Orchestrator</b><span class="status">everything it knows</span><span style="flex:1"></span>`));
+    const close = el("button", "x", "&times;"); close.title = "Back to the workspace";
+    close.addEventListener("click", () => { memoryOpen = false; render(); });
+    box.firstChild.appendChild(close);
+
+    box.appendChild(el("h5", "", "Knowledge base"));
+    if (!kb.length) box.appendChild(el("div", "status", "Nothing added yet."));
+    kb.forEach(k => box.appendChild(el("div", "kbrow", (k.kind === "folder" ? "&#128193; " : "&#128279; ") + esc(k.location))));
+
+    const h = el("h5", "", `History &middot; ${hist.length} order${hist.length === 1 ? "" : "s"} given to agents`);
+    if (hist.length) {
+      const clr = el("button", "linkbtn", "Clear history"); clr.title = "Erase the Orchestrator's memory of past orders";
+      clr.addEventListener("click", () => { if (confirm("Erase the Orchestrator's whole history?")) command("clear_memory", ""); });
+      h.appendChild(clr);
+    }
+    box.appendChild(h);
+    if (!hist.length) box.appendChild(el("div", "status", "No agent has been given an order yet."));
+    hist.forEach(e => {
+      const row = el("div", "mem-entry");
+      const state = e.status === "done" ? "" : ` &middot; ${esc(e.status)}`;
+      row.innerHTML = `<div class="mem-title"><b>${esc(e.agent)}</b><span class="status">${esc(fmtTime(e.started))}${e.seconds !== undefined ? " &middot; " + e.seconds + "s" : ""}${state}</span></div>` +
+        `<div class="mem-label">Input</div><pre>${esc(e.input)}</pre>` +
+        (e.context_from && e.context_from.length ? `<div class="mem-label">Context passed in from</div><pre>${esc(e.context_from.join(", "))}</pre>` : "") +
+        (e.qa && e.qa.length ? `<div class="mem-label">Questions asked of you &amp; your answers</div>` + e.qa.map(r => r.questions.map((q, i) => `<pre>${esc(q.question)}${r.free_text ? "" : " &#8594; " + esc(r.answers[i] || "no preference")}</pre>`).join("") + (r.free_text ? `<pre>&#8594; replied in their own words: ${esc(r.free_text)}</pre>` : "")).join("") : "") +
+        `<div class="mem-label">Output</div>` +
+        (e.status === "done" ? `<pre>${esc(e.output || "")}</pre>` + (e.files_changed && e.files_changed.length ? `<div class="status">Files written: ${esc(e.files_changed.join(", "))}</div>` : "")
+          : e.status === "error" ? `<pre class="err">${esc(e.error || "")}</pre>` : `<div class="status">(${esc(e.status)} — no output)</div>`);
+      box.appendChild(row);
+    });
+  }
+
+  // While an agent works, show cycling whimsical words (like Claude Code's spinner) and elapsed time.
+  let words = ["Spelunking", "Combobulating", "Wrangling", "Percolating", "Noodling", "Conjuring", "Pondering"];
+  let lastWord = "", tick = 0;
+  function pickWord() {
+    let w; do { w = words[Math.floor(Math.random() * words.length)]; } while (w === lastWord && words.length > 1);
+    return (lastWord = w);
+  }
+  setInterval(() => {
+    tick++;
+    document.querySelectorAll(".status.running").forEach(e => {
+      if (tick % 2 === 0) e.querySelector(".word").textContent = pickWord() + "…";
+      const st = parseFloat(e.querySelector(".elapsed").dataset.started);
+      e.querySelector(".elapsed").textContent = "· " + Math.max(0, Math.round(Date.now() / 1000 - st)) + "s";
+    });
+  }, 1000);
+
+  function render() {
+    $("root").classList.toggle("disabled", disabled);
+    renderTabs(); renderPalette();
+    $("lane").style.display = memoryOpen ? "none" : "";
+    $("memory").style.display = memoryOpen ? "" : "none";
+    $("orch-btn").classList.toggle("on", memoryOpen);
+    if (memoryOpen) renderMemory(); else renderLane();
+    height();
+  }
+
+  // Add / edit-agent form (one form: `editingId` is set while editing an existing agent)
+  let editingId = null;
+  const validForm = () => $("f-name").value.trim() && $("f-job").value.trim();
+  function fillForm(a) {
+    $("f-name").value = a ? a.name : ""; $("f-job").value = a ? a.job_description || "" : ""; $("f-skills").value = a ? a.skills || "" : "";
+    // keep a model that is no longer in the list selectable, rather than silently changing it
+    if (a && a.model && ![...$("f-model").options].some(o => o.value === a.model)) $("f-model").appendChild(new Option(a.model, a.model));
+    $("f-model").value = a ? a.model || "" : ""; $("f-atl").value = a && a.atlassian === "never" ? "never" : ""; $("f-edit").checked = !!(a && a.can_edit);
+    $("f-title").textContent = a ? "Edit agent" : "New agent"; $("f-hint").style.display = a ? "" : "none";
+    $("f-save").textContent = a ? "Save changes" : "Save to catalog"; $("f-save").disabled = !validForm();
+  }
+  function openEditor(id) { editingId = id; fillForm(catalog.find(x => x.id === id)); tab = "add"; render(); }
+  function closeForm() { editingId = null; fillForm(null); tab = "catalog"; render(); }
+  ["f-name", "f-job", "f-skills"].forEach(id => $(id).addEventListener("input", () => { $("f-save").disabled = !validForm(); }));
+  $("f-save").addEventListener("click", () => {
+    if (!validForm()) return;
+    const values = {name:$("f-name").value.trim(), job_description:$("f-job").value.trim(), skills:$("f-skills").value.trim(), model:$("f-model").value, atlassian:$("f-atl").value, can_edit:$("f-edit").checked};
+    const existing = editingId && catalog.find(x => x.id === editingId);
+    if (existing) Object.assign(existing, values);
+    else catalog.push({id: "agent_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ...values});
+    closeForm(); commit();
+  });
+  $("orch-btn").addEventListener("click", () => { memoryOpen = !memoryOpen; render(); });
+  $("f-close").addEventListener("click", closeForm);
+  $("tab-catalog").addEventListener("click", closeForm);
+  $("tab-add").addEventListener("click", () => { if (editingId) { editingId = null; fillForm(null); } tab = "add"; render(); });
+
+  // Drag an agent from the catalog and drop it where you want the node.
+  const laneEl = $("lane");
+  laneEl.addEventListener("dragover", e => { e.preventDefault(); laneEl.classList.add("over"); });
+  laneEl.addEventListener("dragleave", e => { if (!laneEl.contains(e.relatedTarget)) laneEl.classList.remove("over"); });
+  laneEl.addEventListener("drop", e => {
+    e.preventDefault(); laneEl.classList.remove("over");
+    const data = e.dataTransfer.getData("text/plain");
+    if (!data.startsWith("new:")) return;
+    const r = laneEl.getBoundingClientRect();
+    add(data.slice(4), {x: Math.max(0, Math.round(e.clientX - r.left - 40)), y: Math.max(0, Math.round(e.clientY - r.top - 17))});
+  });
+
+  window.addEventListener("message", ev => {
+    if (!ev.data || ev.data.type !== "streamlit:render") return;
+    const a = ev.data.args || {};
+    const sig = JSON.stringify([a.outputs, a.memory, a.disabled, a.catalog, a.stages, a.edges, a.reset_token, a.models, a.default_model]);
+    if (started && sig === lastSig) return;   // Streamlit re-sends args on every tick; nothing changed
+    lastSig = sig;
+    disabled = !!a.disabled;
+    outputs = a.outputs || {};
+    memory = a.memory || {knowledge: [], history: []};
+    if (a.status_words && a.status_words.length) words = a.status_words;
+    if (JSON.stringify(models) !== JSON.stringify(a.models || []) || defaultModel !== (a.default_model || "")) {
+      models = a.models || []; defaultModel = a.default_model || "";
+      $("f-model").innerHTML = `<option value="">Default (${esc(defaultModel)})</option>` + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+    }
+    const t = ev.data.theme;
+    if (t) { const r = document.documentElement.style; r.setProperty("--bg", t.backgroundColor); r.setProperty("--text", t.textColor); r.setProperty("--card", t.secondaryBackgroundColor); r.setProperty("--primary", t.primaryColor); }
+    // Local state is the source of truth once started: Streamlit re-sends
+    // args after every commit, and rebuilding from them would eat typing.
+    if (!started || a.reset_token !== resetToken) {
+      catalog = (a.catalog || []).map(c => ({...c}));
+      stages = (a.stages || []).map(s => ({id:s.id, orders:s.orders || "", size:s.size, pos:s.pos}));
+      edges = (a.edges || []).map(e => ({from:e.from, to:e.to}));
+      resetToken = a.reset_token; started = true;
+    }
+    render();
+  });
+  send("streamlit:componentReady", {apiVersion:1});
+  new ResizeObserver(height).observe($("root"));
+</script>
+</body>
+</html>

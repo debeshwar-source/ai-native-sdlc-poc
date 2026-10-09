@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+workspaces/
+runs/
+feedback/
+.repo_cache/
+agent_catalog.json
+knowledge_base.json
+.knowledge_cache/
+agent_workdir/
+orchestrator_memory.json
+atlassian_credentials.json

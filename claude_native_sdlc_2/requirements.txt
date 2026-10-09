@@ -1,0 +1,13 @@
+claude-agent-sdk
+langgraph
+streamlit
+
+# context/indexer.py's tree-sitter repo map. Optional at import time
+# (wrapped in try/except) -- missing them just means an empty map,
+# falling back to the file-tree-only overview.
+tree-sitter
+tree-sitter-python
+tree-sitter-javascript
+tree-sitter-typescript
+tree-sitter-go
+tree-sitter-rust

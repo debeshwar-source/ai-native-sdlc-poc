@@ -1,0 +1,23 @@
+# Visual theme for the Claude-Native SDLC UI. Deliberately not
+# Streamlit's default red-accented look -- a calmer, product-grade
+# palette appropriate for a tool demoed to non-engineering
+# stakeholders. Same design language as claude_sdlc_architect's
+# "Blueprint" theme, with a distinct accent so the two products read
+# as siblings, not the same app.
+
+[theme]
+base = "light"
+primaryColor = "#0F766E"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F8F7"
+textColor = "#122023"
+borderColor = "#E1EDEB"
+linkColor = "#0F766E"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+baseRadius = "0.75rem"
+buttonRadius = "0.6rem"
+showWidgetBorder = true
+
+[client]
+toolbarMode = "minimal"
